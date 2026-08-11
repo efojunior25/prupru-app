@@ -6,4 +6,4 @@ usados pelo mecanismo de auto-atualizacao do proprio app.
 
 Codigo-fonte e mantido internamente pela PruPru Digital Services.
 
-Site: https://www.pruprudigital.com.br
+Site: https://www.pruprudigital.org
