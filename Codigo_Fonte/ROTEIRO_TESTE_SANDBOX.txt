@@ -1,0 +1,127 @@
+==================================================
+PRUPRU DIGITAL SERVICES - ROTEIRO DE TESTE (SANDBOX)
+==================================================
+
+COMO USAR
+---------
+1. Abra o Windows Sandbox (menu Iniciar > "Windows Sandbox").
+2. Nesta pasta (PruPru_Digital_Services), selecione todos os
+   arquivos, Ctrl+C.
+3. Dentro do Sandbox, cole (Ctrl+V) numa pasta, ex: Desktop.
+4. Siga a ordem abaixo. Marque [OK] ou [FALHOU: descricao] em
+   cada item. No final, copie este arquivo preenchido de volta
+   e me mande (ou so me conte o que falhou).
+
+Dica: o Sandbox comeca "limpo" -- sem Steam, sem Chrome, sem
+nada instalado. Alguns passos vao dizer "nao encontrado" e
+isso e esperado (ex: Steam, Chrome). O que importa e se o
+script RODA sem travar/erro e se a MENSAGEM que ele mostra
+bate com a realidade (nao mente dizendo que fez algo que nao fez).
+
+--------------------------------------------------
+1) PruPru_Diagnostico.bat
+--------------------------------------------------
+[ ] Abre, pede admin (aceite o UAC), roda sem travar
+[ ] Gera o .txt na Area de Trabalho (confirme que o arquivo existe)
+[ ] O relatorio faz sentido (RAM, disco, GPU aparecem preenchidos)
+Resultado:
+
+--------------------------------------------------
+2) PruPru_SaudeDisco.bat
+--------------------------------------------------
+[ ] Roda sem travar
+[ ] Gera o .txt na Area de Trabalho
+[ ] Nao trava esperando alguma coisa
+Resultado:
+
+--------------------------------------------------
+3) PruPru_Scanner_Seguranca.bat
+--------------------------------------------------
+[ ] Roda sem travar
+[ ] Gera o .txt na Area de Trabalho
+[ ] Secao de "TAREFAS AGENDADAS" aparece com conteudo
+    (nao pode ficar vazia)
+[ ] Secao de "ITENS DE INICIALIZACAO" aparece com conteudo
+Resultado:
+
+--------------------------------------------------
+4) PruPru_GerenciadorInicializacao.bat
+--------------------------------------------------
+[ ] Abre e mostra a lista numerada de itens ATIVO
+[ ] Escolha um numero de item ATIVO (ex: algo generico do
+    Windows) e digite pra desativar
+[ ] O item some da lista de ATIVO e aparece como DESATIVADO
+[ ] Digite o mesmo numero de novo (agora ele esta na posicao
+    de DESATIVADO) e confirme que reativa e volta a aparecer
+    como ATIVO
+[ ] Digite 0 pra sair, sem erro
+Resultado:
+
+--------------------------------------------------
+5) PruPru_LimparEspaco.bat
+--------------------------------------------------
+[ ] Pede confirmacao (S/N) antes de comecar
+[ ] Roda sem travar
+[ ] No final mostra "Espaco liberado: X MB" com um numero
+    (nao pode aparecer vazio ou erro)
+[ ] Pergunta separada sobre esvaziar a Lixeira
+Resultado:
+
+--------------------------------------------------
+6) PruPru_Otimizador.bat
+--------------------------------------------------
+[ ] Pede confirmacao antes de comecar
+[ ] Passo [1/7] ponto de restauracao roda sem erro visivel
+[ ] Passo [5/7] detecta disco SSD ou HDD (no Sandbox costuma
+    ser SSD ja que roda sobre o disco do host)
+[ ] sfc /scannow roda ate o fim (pode demorar alguns minutos)
+[ ] No final pergunta se quer reiniciar, e RESPEITA sua escolha
+    (responda N para nao reiniciar o Sandbox)
+Resultado:
+
+--------------------------------------------------
+7) PruPru_Reverter.bat
+--------------------------------------------------
+[ ] Roda sem travar, sem pedir nada alem do UAC
+[ ] Mensagens finais fazem sentido
+Resultado:
+
+--------------------------------------------------
+8) PruPru_FocoJogo_ON.bat
+--------------------------------------------------
+[ ] Pede confirmacao antes de comecar
+[ ] Roda sem travar (mesmo sem Steam/navegadores instalados)
+[ ] Diz "concluido" nas 2 etapas
+Resultado:
+
+--------------------------------------------------
+9) PruPru_FocoJogo_OFF.bat
+--------------------------------------------------
+[ ] Roda sem travar
+[ ] Remove as regras sem erro visivel
+Resultado:
+
+--------------------------------------------------
+10) PruPru_TurboRede_ON.bat
+--------------------------------------------------
+[ ] Pede confirmacao antes de comecar
+[ ] Passo [1/4] detecta um adaptador de rede (mostra o nome)
+    -- IMPORTANTE: confira se o nome faz sentido (ex: "Ethernet",
+    nao um nome estranho tipo "vEthernet" ou "Loopback")
+[ ] Roda ate o fim sem travar
+Resultado:
+
+--------------------------------------------------
+11) PruPru_TurboRede_OFF.bat
+--------------------------------------------------
+[ ] Detecta o mesmo adaptador
+[ ] Roda ate o fim sem travar
+Resultado:
+
+--------------------------------------------------
+RESUMO GERAL
+--------------------------------------------------
+Quantos itens falharam: ___
+Quais?
+
+
