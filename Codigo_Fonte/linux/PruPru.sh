@@ -203,11 +203,34 @@ HTMLFOOT
   echo "$out"
 }
 
+# Descobre a Desktop do usuário "de verdade" mesmo quando rodando elevado.
+# sudo/pkexec trocam $HOME pro do root, o que faria o relatório ir parar
+# em /root/Desktop e o usuário nunca veria — resolvemos via SUDO_USER
+# (sudo) ou PKEXEC_UID (pkexec) antes de cair de volta em $HOME.
+real_user_home() {
+  local target_user=""
+  if [ -n "${SUDO_USER:-}" ]; then
+    target_user="$SUDO_USER"
+  elif [ -n "${PKEXEC_UID:-}" ]; then
+    target_user="$(getent passwd "$PKEXEC_UID" 2>/dev/null | cut -d: -f1)"
+  fi
+  if [ -n "$target_user" ]; then
+    getent passwd "$target_user" 2>/dev/null | cut -d: -f6
+  else
+    echo "$HOME"
+  fi
+}
+
 open_report() {
   local path="$1"
-  local dest="$HOME/Desktop/$(basename "$path" .html)-$(date +%Y%m%d-%H%M%S).html"
-  mkdir -p "$HOME/Desktop" 2>/dev/null
+  local home_dir
+  home_dir="$(real_user_home)"
+  local dest="$home_dir/Desktop/$(basename "$path" .html)-$(date +%Y%m%d-%H%M%S).html"
+  mkdir -p "$home_dir/Desktop" 2>/dev/null
   cp "$path" "$dest" 2>/dev/null || dest="$path"
+  if [ -n "${SUDO_USER:-}" ]; then
+    chown "$SUDO_USER":"$SUDO_USER" "$dest" 2>/dev/null
+  fi
   echo "$(t report_saved) $dest"
   ( xdg-open "$dest" >/dev/null 2>&1 & ) || true
 }
