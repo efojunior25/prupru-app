@@ -1,0 +1,58 @@
+# Gera o PruPru.exe a partir do codigo e cria a release como rascunho.
+# Uso: aba Actions > "Gerar release do PruPru" > Run workflow.
+# A versao vem de $AppVersion em PruPru_Launcher_Standalone.ps1. Depois e so
+# revisar o texto do rascunho em Releases e clicar em Publish release.
+name: Gerar release do PruPru
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ler a versao do codigo
+        id: ver
+        shell: pwsh
+        run: |
+          $line = Select-String -Path Codigo_Fonte/PruPru_Launcher_Standalone.ps1 -Pattern '^\$AppVersion = "([0-9.]+)"' | Select-Object -First 1
+          if (-not $line) { throw 'AppVersion nao encontrado' }
+          $v = $line.Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Versao: $v"
+
+      - name: Verificar se a release ja existe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "v${{ steps.ver.outputs.version }}" --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "A release v${{ steps.ver.outputs.version }} ja existe. Aumente o AppVersion antes de gerar outra." }
+          exit 0
+
+      - name: Compilar o PruPru.exe
+        shell: powershell
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module ps2exe -Scope CurrentUser -Force
+          $v = "${{ steps.ver.outputs.version }}"
+          Invoke-ps2exe -inputFile Codigo_Fonte\PruPru_Launcher_Standalone.ps1 -outputFile PruPru.exe -noConsole `
+            -title "PruPru Digital Services" -product "PruPru Digital Services" -company "PruPru Digital Services" `
+            -version "$v.0"
+          if (-not (Test-Path PruPru.exe)) { throw 'PruPru.exe nao foi gerado' }
+          (Get-FileHash PruPru.exe -Algorithm SHA256).Hash.ToLower() | Tee-Object -FilePath sha256.txt
+
+      - name: Criar a release em rascunho
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $hash = Get-Content sha256.txt
+          $notes = "Rascunho gerado automaticamente. Substitua este texto pelas novidades antes de publicar.`n`nHash SHA-256 do PruPru.exe: ``$hash``"
+          gh release create "v$v" PruPru.exe --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title "PruPru Digital Services v$v" --notes $notes
