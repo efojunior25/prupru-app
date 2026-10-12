@@ -1,7 +1,7 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$AppVersion = "1.4.0"
+$AppVersion = "1.4.2"
 $UpdateRepo = "efojunior25/prupru-app"
 
 # ------------------------------------------------------------------
