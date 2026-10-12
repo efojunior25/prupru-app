@@ -27,9 +27,19 @@ if (-not $Lang) {
     }
 }
 
+# As ferramentas (.bat e .ps1) leem lang.txt. Grava sempre, inclusive o
+# idioma detectado na primeira vez, e sem BOM: com BOM o "for /f" dos .bat
+# le o idioma com lixo na frente e cai no portugues.
+function Save-PruPruLang($value) {
+    try {
+        New-Item -ItemType Directory -Path (Split-Path $langFilePath) -Force | Out-Null
+        [System.IO.File]::WriteAllText($langFilePath, $value, (New-Object System.Text.UTF8Encoding $false))
+    } catch { }
+}
+Save-PruPruLang $Lang
+
 function Set-PruPruLang($newLang) {
-    New-Item -ItemType Directory -Path (Split-Path $langFilePath) -Force | Out-Null
-    Set-Content -Path $langFilePath -Value $newLang -Encoding UTF8
+    Save-PruPruLang $newLang
     Start-Process -FilePath $exePath
     [System.Windows.Forms.Application]::Exit()
 }
@@ -170,6 +180,8 @@ $L = $Strings[$Lang]
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
 
 $exePath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+# Sobra de uma atualizacao anterior (o atualizador guarda o exe antigo como .old).
+Remove-Item -LiteralPath ($exePath + '.old') -Force -ErrorAction SilentlyContinue
 
 # ------------------------------------------------------------------
 # Atualizacao automatica (GitHub Releases) - falha silenciosa, nunca
@@ -189,20 +201,32 @@ function Do-Update($DownloadUrl, $ExpectedSha256) {
             }
         }
 
+        # O atualizador roda em PowerShell e o arquivo e gravado em UTF-8 com BOM,
+        # para funcionar em pastas com acento (ex.: C:\Users\Joao com til). Ele
+        # espera o app fechar, guarda o exe antigo como .old e o devolve se a
+        # copia falhar.
+        $q = { param($t) "'" + ($t -replace "'", "''") + "'" }
         $updaterLines = @(
-            '@echo off',
-            'title PruPru Digital Services - Atualizando...',
-            'echo Atualizando o PruPru Digital Services, aguarde...',
-            'timeout /t 2 /nobreak',
-            ('copy /y "{0}" "{1}"' -f $newExePath, $exePath),
-            'echo Atualizacao concluida. Abrindo o PruPru...',
-            'timeout /t 1 /nobreak',
-            ('start "" "{0}"' -f $exePath),
-            'exit'
+            ('$src = {0}' -f (& $q $newExePath)),
+            ('$dst = {0}' -f (& $q $exePath)),
+            '$old = $dst + ''.old''',
+            ('Wait-Process -Id {0} -Timeout 30 -ErrorAction SilentlyContinue' -f $PID),
+            'Start-Sleep -Milliseconds 500',
+            'try {',
+            '    if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force -ErrorAction Stop }',
+            '    Move-Item -LiteralPath $dst -Destination $old -Force -ErrorAction Stop',
+            '    try { Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop }',
+            '    catch { Move-Item -LiteralPath $old -Destination $dst -Force; throw }',
+            '    Remove-Item -LiteralPath $src -Force -ErrorAction SilentlyContinue',
+            '} catch {',
+            '    Add-Type -AssemblyName System.Windows.Forms',
+            ('    [System.Windows.Forms.MessageBox]::Show({0}, ''PruPru Digital Services'', ''OK'', ''Warning'') | Out-Null' -f (& $q $L.MsgUpdateDownloadFailed)),
+            '}',
+            'Start-Process -FilePath $dst'
         )
-        $updaterPath = Join-Path $env:TEMP "PruPru_updater.bat"
-        Set-Content -Path $updaterPath -Value $updaterLines -Encoding ASCII
-        Start-Process -FilePath $updaterPath
+        $updaterPath = Join-Path $env:TEMP "PruPru_updater.ps1"
+        Set-Content -Path $updaterPath -Value $updaterLines -Encoding UTF8
+        Start-Process -FilePath "powershell.exe" -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"{0}"' -f $updaterPath))
         [System.Windows.Forms.Application]::Exit()
     } catch {
         [System.Windows.Forms.MessageBox]::Show($L.MsgUpdateDownloadFailed, "PruPru Digital Services", 'OK', 'Warning') | Out-Null
@@ -261,7 +285,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -502,7 +527,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -692,7 +718,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1026,7 +1053,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1127,7 +1155,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1185,7 +1214,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1501,7 +1531,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1598,7 +1629,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1699,7 +1731,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1864,7 +1897,8 @@ if /i "%PP_LANG%"=="en" (
 :: --- Auto-elevacao (precisa rodar como administrador) ---
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -1991,7 +2025,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -2035,7 +2070,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -2442,7 +2478,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -2614,7 +2651,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -2742,7 +2780,8 @@ if /i "%PP_LANG%"=="en" (
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -2812,7 +2851,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -3104,7 +3144,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
@@ -3389,7 +3430,8 @@ color 0B
 
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (
-    powershell -windowstyle hidden -command "Start-Process cmd -ArgumentList '/c %~f0' -Verb RunAs"
+    set "PP_SELF=%~f0"
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process -FilePath $env:PP_SELF -Verb RunAs"
     exit /b
 )
 
