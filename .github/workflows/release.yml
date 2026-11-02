@@ -1,14 +1,25 @@
-# Gera o PruPru.exe a partir do codigo e cria a release como rascunho.
-# Uso: aba Actions > "Gerar release do PruPru" > Run workflow.
-# A versao vem de $AppVersion em PruPru_Launcher_Standalone.ps1. Depois e so
-# revisar o texto do rascunho em Releases e clicar em Publish release.
-name: Gerar release do PruPru
+# Gera o PruPru.exe a partir do codigo e publica a release no GitHub.
+# Roda sozinho quando $AppVersion (PruPru_Launcher_Standalone.ps1) ou o texto
+# de Codigo_Fonte/NOVIDADES.md mudam na main. Se a release daquela versao ja
+# existe, nao faz nada. Para publicar uma versao nova: aumente o AppVersion,
+# escreva as novidades em NOVIDADES.md e faca o merge.
+# Tambem da para rodar a mao: Actions > "Publicar release do PruPru" > Run workflow.
+name: Publicar release do PruPru
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - Codigo_Fonte/PruPru_Launcher_Standalone.ps1
+      - Codigo_Fonte/NOVIDADES.md
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -19,23 +30,25 @@ jobs:
       - name: Ler a versao do codigo
         id: ver
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $line = Select-String -Path Codigo_Fonte/PruPru_Launcher_Standalone.ps1 -Pattern '^\$AppVersion = "([0-9.]+)"' | Select-Object -First 1
           if (-not $line) { throw 'AppVersion nao encontrado' }
           $v = $line.Matches[0].Groups[1].Value
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "Versao: $v"
-
-      - name: Verificar se a release ja existe
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view "v${{ steps.ver.outputs.version }}" --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -eq 0) { throw "A release v${{ steps.ver.outputs.version }} ja existe. Aumente o AppVersion antes de gerar outra." }
-          exit 0
+          $published = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName,isDraft | ConvertFrom-Json |
+            Where-Object { $_.tagName -eq "v$v" -and -not $_.isDraft }
+          if ($published) {
+            Write-Host "A release v$v ja esta publicada. Nada a fazer."
+            "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "skip=false" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Compilar o PruPru.exe
+        if: steps.ver.outputs.skip == 'false'
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
@@ -47,12 +60,19 @@ jobs:
           if (-not (Test-Path PruPru.exe)) { throw 'PruPru.exe nao foi gerado' }
           (Get-FileHash PruPru.exe -Algorithm SHA256).Hash.ToLower() | Tee-Object -FilePath sha256.txt
 
-      - name: Criar a release em rascunho
+      - name: Publicar a release
+        if: steps.ver.outputs.skip == 'false'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $v = "${{ steps.ver.outputs.version }}"
-          $hash = Get-Content sha256.txt
-          $notes = "Rascunho gerado automaticamente. Substitua este texto pelas novidades antes de publicar.`n`nHash SHA-256 do PruPru.exe: ``$hash``"
-          gh release create "v$v" PruPru.exe --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title "PruPru Digital Services v$v" --notes $notes
+          $title = "PruPru Digital Services v$v"
+          # Apaga rascunhos antigos desta mesma versao, se houver.
+          gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName,name,isDraft | ConvertFrom-Json |
+            Where-Object { $_.isDraft -and $_.name -eq $title } |
+            ForEach-Object { gh release delete $_.tagName --repo $env:GITHUB_REPOSITORY --yes }
+          $hash = (Get-Content sha256.txt -Raw).Trim()
+          $notes = (Get-Content Codigo_Fonte/NOVIDADES.md -Raw -Encoding UTF8).TrimEnd() + "`n`n## Integridade`n`nHash SHA-256 do PruPru.exe: ``$hash```n"
+          Set-Content -Path notes.md -Value $notes -Encoding utf8NoBOM
+          gh release create "v$v" PruPru.exe --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --latest --title $title --notes-file notes.md
