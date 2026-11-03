@@ -54,5 +54,12 @@ jobs:
         run: |
           $v = "${{ steps.ver.outputs.version }}"
           $hash = Get-Content sha256.txt
+          # O site aponta para releases/latest/download/PruPru.sh e PruPru.command,
+          # entao esses dois arquivos precisam estar anexados junto com o .exe.
+          Copy-Item Codigo_Fonte\linux\PruPru.sh PruPru.sh
+          Copy-Item Codigo_Fonte\macos\PruPru.command PruPru.command
+          foreach ($f in 'PruPru.exe', 'PruPru.sh', 'PruPru.command') {
+            if (-not (Test-Path $f)) { throw "$f nao encontrado para anexar a release" }
+          }
           $notes = "Rascunho gerado automaticamente. Substitua este texto pelas novidades antes de publicar.`n`nHash SHA-256 do PruPru.exe: ``$hash``"
-          gh release create "v$v" PruPru.exe --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title "PruPru Digital Services v$v" --notes $notes
+          gh release create "v$v" PruPru.exe PruPru.sh PruPru.command --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title "PruPru Digital Services v$v" --notes $notes
