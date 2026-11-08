@@ -61,5 +61,10 @@ jobs:
           foreach ($f in 'PruPru.exe', 'PruPru.sh', 'PruPru.command') {
             if (-not (Test-Path $f)) { throw "$f nao encontrado para anexar a release" }
           }
-          $notes = "Rascunho gerado automaticamente. Substitua este texto pelas novidades antes de publicar.`n`nHash SHA-256 do PruPru.exe: ``$hash``"
+          $text = Get-Content Codigo_Fonte/NOVIDADES.md -Raw -Encoding UTF8
+          $pattern = "(?ms)^## v" + [regex]::Escape($v) + "\s*\r?\n(.*?)(?=^## |\z)"
+          $m = [regex]::Match($text, $pattern)
+          if (-not $m.Success) { throw "Codigo_Fonte/NOVIDADES.md nao tem a secao '## v$v'. Escreva as novidades dessa versao antes de gerar a release." }
+          $body = $m.Groups[1].Value.Trim()
+          $notes = "$body`n`nHash SHA-256 do PruPru.exe: ``$hash``"
           gh release create "v$v" PruPru.exe PruPru.sh PruPru.command --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --draft --title "PruPru Digital Services v$v" --notes $notes
